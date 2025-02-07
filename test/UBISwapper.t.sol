@@ -2,45 +2,86 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
+import "forge-std/console.sol";
 import {UBISwapper} from "../src/UBISwapper.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
+import {WETH} from "solmate/tokens/WETH.sol";
+
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
-import {IWETH9} from "splits-utils/src/interfaces/external/IWETH9.sol";
 
 /// @dev A dummy implementation of ISwapRouter for testing purposes.
 /// For our tests, the swap function simply returns the input amount.
 contract DummySwapRouter is ISwapRouter {
-    function swap(
-        address inputToken,
-        address outputToken,
-        uint256 inputAmount,
-        uint256 minOutputAmount,
-        address recipient,
+
+    ISwapRouter.ExactInputParams public lastParams;
+    uint256 public amountOutToReturn;
+
+    /// @notice Implements a dummy 1:1 swap for exactInputSingle.
+    function exactInputSingle(ExactInputSingleParams calldata params)
+        external
+        payable
+        override
+        returns (uint256 amountOut)
+    {
+        // For testing, we simply return the input amount as output.
+        return amountOutToReturn;
+    }
+    
+    /// @notice Implements a dummy 1:1 swap for exactInput.
+    function exactInput(ExactInputParams calldata params)
+        external
+        payable
+        override
+        returns (uint256 amountOut)
+    {
+
+        lastParams = ISwapRouter.ExactInputParams({
+            path: params.path,
+            recipient: params.recipient,
+            deadline: params.deadline,
+            amountIn: params.amountIn,
+            amountOutMinimum: params.amountOutMinimum
+        });
+
+        // For testing, we simply return the input amount as output.
+        return amountOutToReturn;
+    }
+    
+    /// @notice Implements a dummy 1:1 swap for exactOutputSingle.
+    function exactOutputSingle(ExactOutputSingleParams calldata params)
+        external
+        payable
+        override
+        returns (uint256 amountIn)
+    {
+        // For testing, we assume input equals output.
+        return params.amountOut;
+    }
+    
+    /// @notice Implements a dummy 1:1 swap for exactOutput.
+    function exactOutput(ExactOutputParams calldata params)
+        external
+        payable
+        override
+        returns (uint256 amountIn)
+    {
+        // For testing, we assume input equals output.
+        return params.amountOut;
+    }
+    
+    /// @notice Dummy implementation for the swap callback required by IUniswapV3SwapCallback.
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
         bytes calldata data
-    ) external payable override returns (uint256 outputAmount) {
-        // Simply return the input amount; no actual swap logic.
-        return inputAmount;
+    ) external override {
+        // In a dummy implementation, we don't need to perform any logic.
     }
 }
 
 /// @dev A minimal mock for WETH9. It allows deposits (minting WETH) and withdrawals.
-contract MockWETH9 is IWETH9 {
-    mapping(address => uint256) public override balanceOf;
+contract MockWETH9 is WETH {
 
-    function deposit() external payable override {
-        balanceOf[msg.sender] += msg.value;
-    }
-    
-    function withdraw(uint256 amount) external override {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        payable(msg.sender).transfer(amount);
-    }
-    
-    // Also accept ETH via the receive function.
-    receive() external payable {
-        deposit();
-    }
 }
 
 /// @dev A simple ERC20 token that supports minting.
@@ -75,7 +116,7 @@ contract UBISwapperTest is Test {
         mockWETH9 = new MockWETH9();
 
         // Deploy UBISwapper with the dummy swap router and WETH9.
-        ubiswapper = new UBISwapper(dummySwapRouter, mockWETH9);
+        ubiswapper = new UBISwapper(dummySwapRouter, payable(mockWETH9));
 
         // Deploy a mock ERC20 token.
         mockERC20 = new MockERC20("Mock Token", "MTK");
@@ -99,18 +140,6 @@ contract UBISwapperTest is Test {
         vm.stopPrank();
     }
 
-    /// @dev Test depositing ETH into UBISwapper.
-    function testEthDeposit() public {
-        uint256 depositAmount = 1 ether;
-
-        // Send ETH directly to UBISwapper. This will trigger the receive() function.
-        (bool success, ) = address(ubiswapper).call{value: depositAmount}("");
-        require(success, "ETH deposit failed");
-
-        // Verify that UBISwapper now holds the deposited ETH.
-        assertEq(address(ubiswapper).balance, depositAmount, "Incorrect ETH balance in UBISwapper");
-    }
-
     /// @dev Test depositing ERC20 tokens into UBISwapper.
     function testERC20Deposit() public {
         uint256 mintAmount = 1000 * 1e18;
@@ -127,6 +156,127 @@ contract UBISwapperTest is Test {
         // Verify UBISwapper’s ERC20 balance.
         uint256 contractTokenBalance = mockERC20.balanceOf(address(ubiswapper));
         assertEq(contractTokenBalance, mintAmount, "Incorrect ERC20 balance in UBISwapper");
+    }
+
+    // function testDepositAndSwapERC20() public {
+    //     // Mint tokens to the caller.
+    //     MockERC20 mockFromERC20 = new MockERC20("Mock2 Token", "MTK2");
+        
+    //     uint256 tokenAmount = 1000 * 1e18;
+    //     mockFromERC20.mint(owner, tokenAmount);
+
+    //     uint256 amountIn = 100 * 1e18;
+    //     uint256 deadline = block.timestamp + 100;
+    //     uint256 amountOutMinimum = 0;
+    //     address recipient = address(5);
+
+    //     vm.startPrank(owner);
+    //     // // Build a swap path where the first token is the testToken.
+    //     ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
+    //         path: abi.encodePacked(address(mockFromERC20), uint24(3000), address(mockWETH9) , uint24(3000), address(mockERC20)),
+    //         recipient: recipient,
+    //         deadline: deadline,
+    //         amountIn: amountIn,
+    //         amountOutMinimum: amountOutMinimum
+    //     });
+
+    //     UBISwapper.SwapCallbackData memory swapCallbackData = UBISwapper.SwapCallbackData({
+    //         exactInputParams: exactInputParams,
+    //         recipient: recipient,
+    //         isERC20: true,
+    //         amountIn: amountIn
+    //     });
+    //     bytes memory data = abi.encode(swapCallbackData);
+
+    //     // Approve UBISwapper to pull the tokens.
+    //     mockFromERC20.approve(address(ubiswapper), amountIn);
+
+    //     // Call deposit with zero ETH.
+    //     ubiswapper.deposit(data);
+
+    //     // Verify that tokens were transferred from the caller to the UBISwapper contract.
+    //     uint256 contractBalance = mockFromERC20.balanceOf(address(ubiswapper));
+    //     assertEq(contractBalance, amountIn);
+
+    //     // Verify that UBISwapper set the allowance for the swap router.
+    //     uint256 allowance = mockFromERC20.allowance(address(ubiswapper), address(dummySwapRouter));
+    //     assertEq(allowance, amountIn);
+    //     vm.stopPrank();
+
+    //     // Verify that the swap router was called with the correct parameters.
+    //     (
+    //         bytes memory recordedPath,
+    //         address recordedRecipient,
+    //         uint256 recordedDeadline,
+    //         uint256 recordedAmountIn,
+    //     ) = dummySwapRouter.lastParams();
+
+    //     assertEq(recordedAmountIn, amountIn);
+    //     assertEq(recordedRecipient, recipient);
+    //     assertEq(recordedDeadline, deadline);
+
+    //     // // Check that the start token in the path is the testToken.
+    //     address tokenFromPath;
+    //     assembly {
+    //         tokenFromPath := mload(add(recordedPath, 0x14))
+    //     }
+    //     assertEq(tokenFromPath, address(mockFromERC20));
+    // }
+
+    function testDepositAndSwapETH() public {
+        uint256 amountIn = 1 ether;
+        uint256 deadline = block.timestamp + 100;
+        uint256 amountOutMinimum = 0;
+        address recipient = address(5);
+
+        vm.startPrank(owner);
+        vm.deal(owner, 10 ether);
+        // // Build a swap path where the first token is the testToken.
+        ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
+            path: abi.encodePacked(address(mockWETH9) , uint24(3000), address(mockERC20)),
+            recipient: recipient,
+            deadline: deadline,
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMinimum
+        });
+
+        UBISwapper.SwapCallbackData memory swapCallbackData = UBISwapper.SwapCallbackData({
+            exactInputParams: exactInputParams,
+            recipient: recipient,
+            isERC20: false,
+            amountIn: amountIn
+        });
+        bytes memory data = abi.encode(swapCallbackData);
+
+        ubiswapper.donate{value: amountIn}(data);
+
+        // Verify that tokens were transferred from the caller to the UBISwapper contract.
+        uint256 contractBalance = mockWETH9.balanceOf(address(ubiswapper));
+        assertEq(contractBalance, amountIn);
+
+        // Verify that UBISwapper set the allowance for the swap router.
+        uint256 allowance = mockWETH9.allowance(address(ubiswapper), address(dummySwapRouter));
+        assertEq(allowance, amountIn);
+        vm.stopPrank();
+
+        // Verify that the swap router was called with the correct parameters.
+        (
+            bytes memory recordedPath,
+            address recordedRecipient,
+            uint256 recordedDeadline,
+            uint256 recordedAmountIn,
+        ) = dummySwapRouter.lastParams();
+
+        assertEq(recordedAmountIn, amountIn);
+        assertEq(recordedRecipient, recipient);
+        assertEq(recordedDeadline, deadline);
+
+        // // Check that the start token in the path is the testToken.
+        address tokenFromPath;
+        assembly {
+            tokenFromPath := mload(add(recordedPath, 0x14))
+        }
+        assertEq(tokenFromPath, address(mockWETH9));
     }
 
 }
