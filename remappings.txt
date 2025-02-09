@@ -5,3 +5,4 @@ solmate/=lib/solmate/src/
 splits-utils/=lib/splits-utils/
 @uniswap/v3-core=lib/v3-core
 v3-periphery/=lib/v3-periphery/contracts/
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
