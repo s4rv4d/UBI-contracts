@@ -46,12 +46,21 @@ contract UBISplitV1Test is Test {
         console.log("ERC20 bal of contract is ", TEST_BUILD_TOKEN.balanceOf(address(splitProxy)));
     }
 
-    function testSplit() public {
+    function testSplitWithdrawSuccess() public {
         vm.startPrank(SARVAD_ADDR);
         vm.warp(block.timestamp + 1 days);
         UBISplitV1(address(splitProxy)).withdrawAllocation();
         console.log("ERC20 bal is ", TEST_BUILD_TOKEN.balanceOf(SARVAD_ADDR));
         console.log("ERC20 bal of contract is ", TEST_BUILD_TOKEN.balanceOf(address(splitProxy)));
+        vm.stopPrank();
+    }
+
+    function testSplitWithdrawFailure() public {
+        vm.expectRevert("No user allocation");
+        vm.startPrank(address(1));
+        vm.warp(block.timestamp + 1 days);
+        UBISplitV1(address(splitProxy)).withdrawAllocation();
+        console.log("ERC20 bal is ", TEST_BUILD_TOKEN.balanceOf(address(1)));
         vm.stopPrank();
     }
 }
