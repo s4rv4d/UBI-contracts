@@ -1,98 +1,14 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import {UBISwapper} from "../src/UBISwapper.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
-import {WETH} from "solmate/tokens/WETH.sol";
-
+import {DummySwapRouter} from "./utils/DummySwapRouter.sol";
+import {MockERC20} from "./utils/MockERC20.sol";
+import {MockWETH9} from "./utils/MockWETH9.sol";
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 
-/// @dev A dummy implementation of ISwapRouter for testing purposes.
-/// For our tests, the swap function simply returns the input amount.
-contract DummySwapRouter is ISwapRouter {
-
-    ISwapRouter.ExactInputParams public lastParams;
-    uint256 public amountOutToReturn;
-
-    /// @notice Implements a dummy 1:1 swap for exactInputSingle.
-    function exactInputSingle(ExactInputSingleParams calldata params)
-        external
-        payable
-        override
-        returns (uint256 amountOut)
-    {
-        // For testing, we simply return the input amount as output.
-        return amountOutToReturn;
-    }
-    
-    /// @notice Implements a dummy 1:1 swap for exactInput.
-    function exactInput(ExactInputParams calldata params)
-        external
-        payable
-        override
-        returns (uint256 amountOut)
-    {
-
-        lastParams = ISwapRouter.ExactInputParams({
-            path: params.path,
-            recipient: params.recipient,
-            deadline: params.deadline,
-            amountIn: params.amountIn,
-            amountOutMinimum: params.amountOutMinimum
-        });
-
-        // For testing, we simply return the input amount as output.
-        return amountOutToReturn;
-    }
-    
-    /// @notice Implements a dummy 1:1 swap for exactOutputSingle.
-    function exactOutputSingle(ExactOutputSingleParams calldata params)
-        external
-        payable
-        override
-        returns (uint256 amountIn)
-    {
-        // For testing, we assume input equals output.
-        return params.amountOut;
-    }
-    
-    /// @notice Implements a dummy 1:1 swap for exactOutput.
-    function exactOutput(ExactOutputParams calldata params)
-        external
-        payable
-        override
-        returns (uint256 amountIn)
-    {
-        // For testing, we assume input equals output.
-        return params.amountOut;
-    }
-    
-    /// @notice Dummy implementation for the swap callback required by IUniswapV3SwapCallback.
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
-    ) external override {
-        // In a dummy implementation, we don't need to perform any logic.
-    }
-}
-
-/// @dev A minimal mock for WETH9. It allows deposits (minting WETH) and withdrawals.
-contract MockWETH9 is WETH {
-
-}
-
-/// @dev A simple ERC20 token that supports minting.
-/// Inherits from solmate’s ERC20.
-contract MockERC20 is ERC20 {
-    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_, 18) {}
-    
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
 
 /// @dev The Foundry test contract for UBISwapper.
 contract UBISwapperTest is Test {
@@ -161,7 +77,7 @@ contract UBISwapperTest is Test {
     function testDepositAndSwapERC20() public {
         // Mint tokens to the caller.
         MockERC20 mockFromERC20 = new MockERC20("Mock2 Token", "MTK2");
-        
+
         uint256 tokenAmount = 1000 * 1e18;
         mockFromERC20.mint(owner, tokenAmount);
 
@@ -173,7 +89,9 @@ contract UBISwapperTest is Test {
         vm.startPrank(owner);
         // // Build a swap path where the first token is the testToken.
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
-            path: abi.encodePacked(address(mockFromERC20), uint24(3000), address(mockWETH9) , uint24(3000), address(mockERC20)),
+            path: abi.encodePacked(
+                address(mockFromERC20), uint24(3000), address(mockWETH9), uint24(3000), address(mockERC20)
+            ),
             recipient: recipient,
             deadline: deadline,
             amountIn: amountIn,
@@ -204,12 +122,8 @@ contract UBISwapperTest is Test {
         vm.stopPrank();
 
         // Verify that the swap router was called with the correct parameters.
-        (
-            bytes memory recordedPath,
-            address recordedRecipient,
-            uint256 recordedDeadline,
-            uint256 recordedAmountIn,
-        ) = dummySwapRouter.lastParams();
+        (bytes memory recordedPath, address recordedRecipient, uint256 recordedDeadline, uint256 recordedAmountIn,) =
+            dummySwapRouter.lastParams();
 
         assertEq(recordedAmountIn, amountIn);
         assertEq(recordedRecipient, recipient);
@@ -233,7 +147,7 @@ contract UBISwapperTest is Test {
         vm.deal(owner, 10 ether);
         // // Build a swap path where the first token is the testToken.
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
-            path: abi.encodePacked(address(mockWETH9) , uint24(3000), address(mockERC20)),
+            path: abi.encodePacked(address(mockWETH9), uint24(3000), address(mockERC20)),
             recipient: recipient,
             deadline: deadline,
             amountIn: amountIn,
@@ -260,12 +174,8 @@ contract UBISwapperTest is Test {
         vm.stopPrank();
 
         // Verify that the swap router was called with the correct parameters.
-        (
-            bytes memory recordedPath,
-            address recordedRecipient,
-            uint256 recordedDeadline,
-            uint256 recordedAmountIn,
-        ) = dummySwapRouter.lastParams();
+        (bytes memory recordedPath, address recordedRecipient, uint256 recordedDeadline, uint256 recordedAmountIn,) =
+            dummySwapRouter.lastParams();
 
         assertEq(recordedAmountIn, amountIn);
         assertEq(recordedRecipient, recipient);
@@ -278,5 +188,4 @@ contract UBISwapperTest is Test {
         }
         assertEq(tokenFromPath, address(mockWETH9));
     }
-
 }

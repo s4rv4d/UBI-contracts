@@ -10,9 +10,7 @@ import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {TokenUtils} from "splits-utils/src/TokenUtils.sol";
 import {WalletImpl} from "splits-utils/src/WalletImpl.sol";
 
-
 contract UBISwapper is WalletImpl, PausableImpl {
-
     /// libraries
     using SafeTransferLib for address;
     using TokenUtils for address;
@@ -66,7 +64,7 @@ contract UBISwapper is WalletImpl, PausableImpl {
     /// functions - onlyOwner
     function setBeneficiary(address beneficiary_) external onlyOwner {
         $beneficiary = beneficiary_;
-        emit SetBeneficiary(beneficiary_); 
+        emit SetBeneficiary(beneficiary_);
     }
 
     function setTokenToSwap(address token_) external onlyOwner {
