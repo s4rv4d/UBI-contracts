@@ -8,16 +8,21 @@ import {PausableImpl} from "splits-utils/src/PausableImpl.sol";
 import {SafeCastLib} from "solady/utils/SafeCastLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {TokenUtils} from "splits-utils/src/TokenUtils.sol";
-import {WalletImpl} from "splits-utils/src/WalletImpl.sol";
 
-contract UBISwapper is WalletImpl, PausableImpl {
-    /// libraries
+contract UBISwapper is PausableImpl {
+    /* -------------------------------------------------------------------------- */
+    /*                                   Libraries                                */
+    /* -------------------------------------------------------------------------- */
     using SafeTransferLib for address;
     using TokenUtils for address;
 
-    /// errors
+    /* -------------------------------------------------------------------------- */
+    /*                                   ERRORS                                   */
+    /* -------------------------------------------------------------------------- */
 
-    /// structs
+    /* -------------------------------------------------------------------------- */
+    /*                                   STRUCTS                                   */
+    /* -------------------------------------------------------------------------- */
     struct InitParams {
         address owner;
         bool paused;
@@ -32,25 +37,55 @@ contract UBISwapper is WalletImpl, PausableImpl {
         uint256 amountIn;
     }
 
-    /// events
+    /* -------------------------------------------------------------------------- */
+    /*                                   EVENTS                                   */
+    /* -------------------------------------------------------------------------- */
+
+    /// @dev ERC20 deposited
+    /// @param sender_ person depositing
+    /// @param amount_ amount being deposited
     event DepositedERC20(address indexed sender_, uint256 amount_);
+
+    /// @dev ETH deposited
+    /// @param sender_ person depositing
+    /// @param amount_ amount being deposited
     event DepositedETH(address indexed sender_, uint256 amount_);
+
+    /// @dev setting beneficiary (ex: split contract)
+    /// @param beneficiary_ address
     event SetBeneficiary(address indexed beneficiary_);
+
+    /// @dev setting to swap from donated tokens
+    /// @param tokenAddr_ address of token to swap to
     event SetTokenToSwap(address tokenAddr_);
 
-    /// storage
+    /* -------------------------------------------------------------------------- */
+    /*                            CONSTANTS/IMMUTABLES                            */
+    /* -------------------------------------------------------------------------- */
+
+    /// @dev swap router used to swap
     ISwapRouter public immutable swapRouter;
+
+    /// @dev reference to WETh
     WETH public immutable weth9;
+
+    /// @dev reference to beneficiary
     address internal $beneficiary;
+
+    /// @dev reference to token to final swap
     ERC20 internal $tokenToSwap;
 
-    /// constructor and initializer
-    constructor(ISwapRouter swapRouter_, address payable weth9_) {
+    /* -------------------------------------------------------------------------- */
+    /*                              CONSTRUCTOR                                   */
+    /* -------------------------------------------------------------------------- */
+
+    /// @param swapRouter_ v3 router addr 
+    /// @param weth9_ weth addr
+    /// @param params_ init params
+    constructor(ISwapRouter swapRouter_, address payable weth9_, InitParams calldata params_) {
         swapRouter = swapRouter_;
         weth9 = WETH(weth9_);
-    }
 
-    function initializer(InitParams calldata params_) external {
         // only swapperFactory may call `initializer`
         if (msg.sender != params_.owner) revert Unauthorized();
 
@@ -61,19 +96,32 @@ contract UBISwapper is WalletImpl, PausableImpl {
         $tokenToSwap = ERC20(params_.tokenToBeneficiary);
     }
 
+    /* -------------------------------------------------------------------------- */
+    /*                          PUBLIC/EXTERNAL FUNCTIONS                         */
+    /* -------------------------------------------------------------------------- */
     /// functions - onlyOwner
+    
+    /// @notice to be only called by owner
+    /// @dev updates beneficiary
+    /// @param beneficiary_ new beneficiary address
     function setBeneficiary(address beneficiary_) external onlyOwner {
         $beneficiary = beneficiary_;
         emit SetBeneficiary(beneficiary_);
     }
 
+    /// @notice to be only called by owner
+    /// @dev updates token for final swap
+    /// @param token_ address of new token to update too
     function setTokenToSwap(address token_) external onlyOwner {
         $tokenToSwap = ERC20(token_);
         emit SetTokenToSwap(token_);
     }
 
     // functions - external
-    function donate(bytes calldata data_) external payable {
+
+    /// @dev swapp incoming ETH/ERC20 donations to $tokenToSwap
+    /// @param data_ swap params
+    function donate(bytes calldata data_) external payable pausable {
         SwapCallbackData memory swapCallbackData = abi.decode(data_, (SwapCallbackData));
 
         ISwapRouter.ExactInputParams memory eip = swapCallbackData.exactInputParams;
@@ -93,6 +141,8 @@ contract UBISwapper is WalletImpl, PausableImpl {
     }
 
     /// functions - helpers
+
+    /// @dev helper func to get first token in multi-hop path
     function _getStartTokenFromPath(bytes memory path) internal pure returns (address token) {
         assembly {
             token := mload(add(path, 0x14))
