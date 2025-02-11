@@ -31,13 +31,7 @@ contract UBISwapperTest is Test {
         dummySwapRouter = new DummySwapRouter();
         mockWETH9 = new MockWETH9();
 
-        // Deploy UBISwapper with the dummy swap router and WETH9.
-        ubiswapper = new UBISwapper(dummySwapRouter, payable(mockWETH9));
-
-        // Deploy a mock ERC20 token.
-        mockERC20 = new MockERC20("Mock Token", "MTK");
-
-        // Call the initializer. UBISwapper.InitParams expects:
+         // Call the initializer. UBISwapper.InitParams expects:
         //  - owner (must match msg.sender during the call),
         //  - paused flag,
         //  - beneficiary address,
@@ -48,7 +42,12 @@ contract UBISwapperTest is Test {
             beneficiary: beneficiary,
             tokenToBeneficiary: address(mockERC20)
         });
-        ubiswapper.initializer(params);
+
+        // Deploy UBISwapper with the dummy swap router and WETH9.
+        ubiswapper = new UBISwapper(dummySwapRouter, payable(mockWETH9), params);
+
+        // Deploy a mock ERC20 token.
+        mockERC20 = new MockERC20("Mock Token", "MTK");
 
         // (Optionally) call setTokenToSwap to set the token used for swapping.
         // In our contract, this stores the token address for later use.
@@ -187,5 +186,37 @@ contract UBISwapperTest is Test {
             tokenFromPath := mload(add(recordedPath, 0x14))
         }
         assertEq(tokenFromPath, address(mockWETH9));
+    }
+
+    function testDepositAndSwapETHPaused() public {
+
+        uint256 amountIn = 1 ether;
+        uint256 deadline = block.timestamp + 100;
+        uint256 amountOutMinimum = 0;
+        address recipient = address(5);
+
+        vm.startPrank(owner);
+        ubiswapper.setPaused(true);
+
+        vm.deal(owner, 10 ether);
+        // // Build a swap path where the first token is the testToken.
+        ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
+            path: abi.encodePacked(address(mockWETH9), uint24(3000), address(mockERC20)),
+            recipient: recipient,
+            deadline: deadline,
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMinimum
+        });
+
+        UBISwapper.SwapCallbackData memory swapCallbackData = UBISwapper.SwapCallbackData({
+            exactInputParams: exactInputParams,
+            recipient: recipient,
+            isERC20: false,
+            amountIn: amountIn
+        });
+        bytes memory data = abi.encode(swapCallbackData);
+
+        vm.expectRevert();
+        ubiswapper.donate{value: amountIn}(data);
     }
 }

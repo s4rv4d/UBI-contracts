@@ -24,6 +24,8 @@ contract UBISplitV1Test is Test {
 
     uint256 basefork;
 
+    error NoAllocation(address _builder);
+
     function setUp() public {
         basefork = vm.createFork(BASE_RPC_URL);
         vm.selectFork(basefork);
@@ -56,7 +58,7 @@ contract UBISplitV1Test is Test {
     }
 
     function testSplitWithdrawFailure() public {
-        vm.expectRevert("No user allocation");
+        vm.expectRevert(abi.encodeWithSelector(NoAllocation.selector, address(1)));
         vm.startPrank(address(1));
         vm.warp(block.timestamp + 1 days);
         UBISplitV1(address(splitProxy)).withdrawAllocation();

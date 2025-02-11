@@ -2,8 +2,8 @@
 pragma solidity ^0.8.22;
 
 import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "openzeppelin-contracts/proxy/utils/Initializable.sol";
+import {PausableImpl} from "splits-utils/src/PausableImpl.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {TokenUtils} from "splits-utils/src/TokenUtils.sol";
@@ -13,7 +13,7 @@ import {IPassportBuilderScore} from "./interfaces/IPassportBuilderScore.sol";
 /// @title UBISplitV1
 /// @author s4rv4d
 /// @notice Split implemenation contract
-contract UBISplitV1 is UUPSUpgradeable, OwnableUpgradeable {
+contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /* -------------------------------------------------------------------------- */
     /*                                   Libraries                                */
     /* -------------------------------------------------------------------------- */
@@ -41,21 +41,17 @@ contract UBISplitV1 is UUPSUpgradeable, OwnableUpgradeable {
     event AllocationWithdraw(address _recipient, uint256 _amount);
 
     /* -------------------------------------------------------------------------- */
-    /*                            CONSTANTS/IMMUTABLES                            */
+    /*                                   STORAGE                                  */
     /* -------------------------------------------------------------------------- */
 
     /// @dev BUILD contract
-    ERC20 public constant $BUILD;
+    ERC20 public $BUILD;
 
     /// @dev the contract to query builder score
-    IPassportBuilderScore public constant scoreContract;
+    IPassportBuilderScore public scoreContract;
 
     /// @dev reference to UBISwapper contract
-    address public constant swapperContract;
-
-    /* -------------------------------------------------------------------------- */
-    /*                                   STORAGE                                  */
-    /* -------------------------------------------------------------------------- */
+    address public swapperContract;
 
     /// @dev vesting duration for allocation withdrawal
     uint256 public vestingDuration;
@@ -82,7 +78,8 @@ contract UBISplitV1 is UUPSUpgradeable, OwnableUpgradeable {
         public
         initializer
     {
-        __Ownable_init(msg.sender);
+
+        __initPausable({owner_: msg.sender, paused_: false});
         __UUPSUpgradeable_init();
 
         $BUILD = ERC20(_buildToken);
@@ -102,8 +99,8 @@ contract UBISplitV1 is UUPSUpgradeable, OwnableUpgradeable {
     function getAllocation(address _recipient) public view returns (uint256) {
         /// @dev userAllocation = (userScore / totalScore) * totalRewardPool
         /// @audit the final 1000 is just to test needs to be replaced by totalScore via passport register/API
-        uint256 userAllocation = (scoreContract.getScoreByAddress(recipient) * $BUILD.balanceOf(address(this))) / 1000;
-        return userAllocation
+        uint256 userAllocation = (scoreContract.getScoreByAddress(_recipient) * $BUILD.balanceOf(address(this))) / 1000;
+        return userAllocation;
     }
 
     /// @dev calculates how much is vested
@@ -138,18 +135,26 @@ contract UBISplitV1 is UUPSUpgradeable, OwnableUpgradeable {
     function withdrawAllocation() external {
         address recipient = msg.sender;
         uint256 userAllocation = getAllocation(recipient);
-        require(userAllocation > 0, NoAllocation(recipient));
+        if (userAllocation <= 0) {
+            revert NoAllocation(recipient);
+        }
 
         uint256 allowed = _vestedAmount(userAllocation, block.timestamp, recipient);
-        require(allowed > 0, NothingToWithdraw(recipient));
+        if (allowed <= 0) {
+            revert NothingToWithdraw(recipient);
+        }
 
         /// @dev withdrawableAmount = allowedWithdrawal - withdrawn[msg.sender]
         uint256 withdrawable = allowed - userWithdrawn[recipient];
-        require(withdrawable > 0, NothingToWithdraw(recipient));
+        if (withdrawable <= 0) {
+            revert NothingToWithdraw(recipient);
+        }
 
         userWithdrawn[recipient] += withdrawable;
         bool status = $BUILD.transfer(recipient, withdrawable);
-        require(status, FailedToWithdraw());
+        if (!status) {
+            revert FailedToWithdraw();
+        }
 
         emit AllocationWithdraw(recipient, withdrawable);
     }

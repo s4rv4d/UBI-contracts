@@ -82,7 +82,7 @@ contract UBISwapper is PausableImpl {
     /// @param swapRouter_ v3 router addr 
     /// @param weth9_ weth addr
     /// @param params_ init params
-    constructor(ISwapRouter swapRouter_, address payable weth9_, InitParams calldata params_) {
+    constructor(ISwapRouter swapRouter_, address payable weth9_, InitParams memory params_) {
         swapRouter = swapRouter_;
         weth9 = WETH(weth9_);
 
