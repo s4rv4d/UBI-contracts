@@ -50,9 +50,6 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev the contract to query builder score
     IPassportBuilderScore public scoreContract;
 
-    /// @dev reference to UBISwapper contract
-    address public swapperContract;
-
     /// @dev vesting duration for allocation withdrawal
     uint256 public vestingDuration;
 
@@ -72,9 +69,8 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev initializes UBISplit via proxy
     /// @param _buildToken address of BUILD token deposited
     /// @param _passportAddress address of passport registry to get address scores
-    /// @param _swapperContract address of UBISwapper
     /// @param _vestingTime setting vesting time ex: 10 weeks
-    function initialize(address _buildToken, address _passportAddress, address _swapperContract, uint256 _vestingTime)
+    function initialize(address _buildToken, address _passportAddress, uint256 _vestingTime)
         public
         initializer
     {
@@ -84,7 +80,6 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
         $BUILD = ERC20(_buildToken);
         scoreContract = IPassportBuilderScore(_passportAddress);
-        swapperContract = _swapperContract;
         vestingDuration = _vestingTime;
     }
 
@@ -96,10 +91,11 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
     /// @dev get user allocation
     /// @param _recipient user for who allocation is being calculated for
-    function getAllocation(address _recipient) public view returns (uint256) {
+    function getAllocation(address _recipient, uint256 _totalScore) public view returns (uint256) {
         /// @dev userAllocation = (userScore / totalScore) * totalRewardPool
         /// @audit the final 1000 is just to test needs to be replaced by totalScore via passport register/API
-        uint256 userAllocation = (scoreContract.getScoreByAddress(_recipient) * $BUILD.balanceOf(address(this))) / 1000;
+        //uint256 userAllocation = (scoreContract.getScoreByAddress(_recipient) * $BUILD.balanceOf(address(this))) / _totalScore;
+        uint256 userAllocation = (100 * $BUILD.balanceOf(address(this))) / _totalScore;
         return userAllocation;
     }
 
@@ -132,9 +128,9 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
     /// functions - external
     /// @dev function to withdraw/claim user allocation
-    function withdrawAllocation() external {
+    function withdrawAllocation(uint256 _totalScore) external {
         address recipient = msg.sender;
-        uint256 userAllocation = getAllocation(recipient);
+        uint256 userAllocation = getAllocation(recipient, _totalScore);
         if (userAllocation <= 0) {
             revert NoAllocation(recipient);
         }

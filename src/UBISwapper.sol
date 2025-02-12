@@ -86,9 +86,6 @@ contract UBISwapper is PausableImpl {
         swapRouter = swapRouter_;
         weth9 = WETH(weth9_);
 
-        // only swapperFactory may call `initializer`
-        if (msg.sender != params_.owner) revert Unauthorized();
-
         // don't need to init wallet separately
         __initPausable({owner_: params_.owner, paused_: params_.paused});
 
