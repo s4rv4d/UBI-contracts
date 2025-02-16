@@ -49,7 +49,7 @@ contract DeployUBI is Script {
         sContract = IPassportBuilderScore(scoreContract);
         splitImplementation = new UBISplitV1();
 
-        bytes memory data = abi.encodeWithSignature("initialize(address,address,uint256)", address(buildToken), address(scoreContract),10 weeks);
+        bytes memory data = abi.encodeWithSignature("initialize(address,address,uint256,uint256,uint256,uint256)", address(buildToken), address(scoreContract),60, 100, 10, 7);
         splitProxy = new UBISplitProxy(address(splitImplementation), data);
 
         // deploy swapper

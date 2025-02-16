@@ -24,17 +24,20 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /*                                   ERRORS                                   */
     /* -------------------------------------------------------------------------- */
 
-    /// @dev builder has no allocation to withdraw
-    error NoAllocation(address _builder);
-    
-    /// @dev final calculation after withdraw is 0
-    error NothingToWithdraw(address _builder);
-
     /// @dev withdrawal failed
     error FailedToWithdraw();
 
     /// @dev not enough balance
     error LessBUILDBalance();
+
+    /// @dev doesnt meet score requirements
+    error NotValidScore(address _recipient);
+
+    /// @dev already claimed
+    error ClaimedFullAllocation();
+
+    /// @dev claimed early
+    error ClaimedEarly();
 
     /* -------------------------------------------------------------------------- */
     /*                                   EVENTS                                   */
@@ -42,6 +45,18 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
     /// @dev amount withdrawn by builder
     event AllocationWithdraw(address _recipient, uint256 _amount);
+
+    /// @dev updated claim amount
+    event UpdatedClaimAmount(uint256 _newClaimAmount);
+
+    /// @dev updated score threshold
+    event UpdatedScorethreshold(uint256 _newScorethreshold);
+
+    /// @dev updated claim amount
+    event UpdatedClaimCount(uint256 _newClaimCount);
+
+    /// @dev updated claim amount
+    event UpdatedClaimInterval(uint256 _newClaimInterval);
 
     /* -------------------------------------------------------------------------- */
     /*                                   STORAGE                                  */
@@ -53,11 +68,17 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev the contract to query builder score
     IPassportBuilderScore public scoreContract;
 
-    /// @dev vesting duration for allocation withdrawal
-    uint256 public vestingDuration;
+    /// @dev score threshold
+    uint256 public scoreThreshold;
 
-    /// @dev user to vesting start mapping
-    mapping(address => uint256) public userVesting;
+    /// @dev amount a user can claim
+    uint256 public claimAmount;
+
+    /// @dev amount of times user can claim
+    uint256 public claimCount;
+
+    /// @dev time between each claim
+    uint256 public claimInterval;
 
     /// @dev mapping for how much user has withdrawn
     mapping(address => uint256) public userWithdrawn;
@@ -78,8 +99,11 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev initializes UBISplit via proxy
     /// @param _buildToken address of BUILD token deposited
     /// @param _passportAddress address of passport registry to get address scores
-    /// @param _vestingTime setting vesting time ex: 10 weeks
-    function initialize(address _buildToken, address _passportAddress, uint256 _vestingTime)
+    /// @param _scoreThreshold the score threshold to let eligible users claim
+    /// @param _claimAmount the static claimable amount
+    /// @param _claimCount the number of time a users can claim (ex: 10)
+    /// @param _claimInterval time between each claim (ex: 10)
+    function initialize(address _buildToken, address _passportAddress, uint256 _scoreThreshold, uint256 _claimAmount, uint256 _claimCount, uint256 _claimInterval)
         public
         initializer
     {
@@ -89,7 +113,10 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
         $BUILD = ERC20(_buildToken);
         scoreContract = IPassportBuilderScore(_passportAddress);
-        vestingDuration = _vestingTime;
+        scoreThreshold = _scoreThreshold;
+        claimAmount = _claimAmount;
+        claimCount = _claimCount;
+        claimInterval = _claimInterval;
     }
 
     /* -------------------------------------------------------------------------- */
@@ -98,74 +125,127 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
     /// functions - view
 
-    /// @dev get user allocation
+    /// @dev get user claimed value
     /// @param _recipient user for who allocation is being calculated for
-    function getAllocation(address _recipient, uint256 _totalScore) public view returns (uint256) {
-        /// @dev userAllocation = (userScore / totalScore) * totalRewardPool
-        /// @audit the final 1000 is just to test needs to be replaced by totalScore via passport register/API
-        uint256 userAllocation = (scoreContract.getScoreByAddress(_recipient) * $BUILD.balanceOf(address(this))) / _totalScore;
-        // uint256 userAllocation = (100 * $BUILD.balanceOf(address(this))) / _totalScore;
-        return userAllocation;
+    function getClaimedAmount(address _recipient) public view returns (uint256) {
+        return userWithdrawn[_recipient];
     }
 
-    /// @dev calculates how much is vested
-    /// @param _allocation user allocation value
-    /// @param _currentTimestamp block.timestamp
-    /// @param _recipient reference to msg.sender
-    function _vestedAmount(uint256 _allocation, uint256 _currentTimestamp, address _recipient)
-        internal
-        returns (uint256)
-    {
-        /// @dev setup vestedDuration per user if not done the first time
-        if (userVesting[_recipient] == 0) {
-            userVesting[_recipient] = _currentTimestamp;
+    /// @dev get user next claim date
+    /// @param _recipient user for who next date is being calculated for
+    function getNextClaimDate(address _recipient) public view returns (uint256) {
+        return dateToClaimNext[_recipient];
+    }
+
+    /// @dev get claim amount
+    function getClaimAmount() public view returns (uint256) {
+        return claimAmount;
+    }
+
+    /// @dev get score threshold
+    function getScoreThreshold() public view returns (uint256) {
+        return scoreThreshold;
+    }
+
+    /// @dev get claim count
+    function getClaimCount() public view returns (uint256) {
+        return claimCount;
+    }
+
+    /// @dev get claim interval
+    function getClaimInterval() public view returns (uint256) {
+        return claimInterval;
+    }
+
+    /// @dev check if user is eligible for claim
+    /// @param _recipient user 
+    function isValidUser(address _recipient) public view returns (bool) {
+        uint256 userScore = scoreContract.getScoreByAddress(_recipient);
+        return userScore >= scoreThreshold;
+    }
+
+    /// @dev get user allocation
+    /// @param _recipient user 
+    function getUserAllocation(address _recipient) public view returns (uint256) {
+
+        if (!isValidUser(_recipient)) {
+            return 0;
         }
 
-        uint256 vestedStarting = userVesting[_recipient];
-
-        /// @dev adding 1 seconds so that elapsed is never 0 to avoid starting vesting edge case
-        uint256 elapsed = (_currentTimestamp + 1 seconds) - vestedStarting;
-
-        if (elapsed >= vestingDuration) {
-            /// @dev if completed 10 weeks return what ever is remaining
-            return _allocation;
+        if (userDoneClaimCount[_recipient] >= claimCount) {
+            return 0;
         }
 
-        /// @dev allowedWithdrawal = userAllocation * (elapsedTime / vestingDuration)
-        return (_allocation * elapsed) / vestingDuration;
+        return claimAmount;
     }
 
     /// functions - external
     /// @dev function to withdraw/claim user allocation
-    function withdrawAllocation(uint256 _totalScore) external {
+    function withdrawAllocation() external {
         address recipient = msg.sender;
-        uint256 userAllocation = getAllocation(recipient, _totalScore);
-        if (userAllocation <= 0) {
-            revert NoAllocation(recipient);
+        uint256 userAllocation = claimAmount;
+
+        /// checks
+        if (!isValidUser(recipient)) {
+            revert NotValidScore(recipient);
         }
 
-        uint256 allowed = _vestedAmount(userAllocation, block.timestamp, recipient);
-        if (allowed <= 0) {
-            revert NothingToWithdraw(recipient);
+        if (userDoneClaimCount[recipient] >= claimCount) {
+            revert ClaimedFullAllocation();
         }
 
-        /// @dev withdrawableAmount = allowedWithdrawal - withdrawn[msg.sender]
-        uint256 withdrawable = allowed - userWithdrawn[recipient];
-        if (withdrawable <= 0) {
-            revert NothingToWithdraw(recipient);
+        if (block.timestamp < dateToClaimNext[recipient]) {
+            revert ClaimedEarly();
         }
 
-        userWithdrawn[recipient] += withdrawable;
-        bool status = $BUILD.transfer(recipient, withdrawable);
+        if (userAllocation > $BUILD.balanceOf(address(this))) {
+            revert LessBUILDBalance();
+        }
+
+        /// effects
+        dateToClaimNext[recipient] = block.timestamp + (claimInterval * 1 days);
+        userDoneClaimCount[recipient] += 1;
+        userWithdrawn[recipient] += userAllocation;
+
+        /// interaction
+        bool status = $BUILD.transfer(recipient, userAllocation * $BUILD.decimals);
         if (!status) {
             revert FailedToWithdraw();
         }
 
-        emit AllocationWithdraw(recipient, withdrawable);
+        emit AllocationWithdraw(recipient, userAllocation);
     }
 
     /* -------------------------------------------------------------------------- */
     /*                             onlyOwner FUNCTIONS                            */
     /* -------------------------------------------------------------------------- */
     function _authorizeUpgrade(address _newImplementation) internal override onlyOwner {}
+
+    /// @dev update claim amount
+    /// @param _newClaimAmount updated claim amount
+    function setClaimAmount(uint256 _newClaimAmount) external onlyOwner {
+        claimAmount = _newClaimAmount;
+        emit UpdatedClaimAmount(_newClaimAmount);
+    }
+
+    /// @dev update score threshold
+    /// @param _newScorethreshold updated score threshold
+    function setScorethreshold(uint256 _newScorethreshold) external onlyOwner {
+        scoreThreshold = _newScorethreshold;
+        emit UpdatedScorethreshold(_newScorethreshold);
+    }
+
+    /// @dev update claim count
+    /// @param _newClaimCount updated claim count
+    function setClaimCount(uint256 _newClaimCount) external onlyOwner {
+        claimCount = _newClaimCount;
+        emit UpdatedClaimCount(_newClaimCount);
+    }
+
+    /// @dev update claim interval
+    /// @param _newClaimInterval updated claim interval
+    function setClaimInterval(uint256 _newClaimInterval) external onlyOwner {
+        claimInterval = _newClaimInterval;
+        emit UpdatedClaimInterval(_newClaimInterval);
+    }
 }

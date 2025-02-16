@@ -41,15 +41,10 @@ contract UBISwapper is PausableImpl {
     /*                                   EVENTS                                   */
     /* -------------------------------------------------------------------------- */
 
-    /// @dev ERC20 deposited
+    /// @dev ETH/ERC20 deposited
     /// @param sender_ person depositing
     /// @param amount_ amount being deposited
-    event DepositedERC20(address indexed sender_, uint256 amount_);
-
-    /// @dev ETH deposited
-    /// @param sender_ person depositing
-    /// @param amount_ amount being deposited
-    event DepositedETH(address indexed sender_, uint256 amount_);
+    event Deposited(address indexed sender_, uint256 amount_);
 
     /// @dev setting beneficiary (ex: split contract)
     /// @param beneficiary_ address
@@ -116,7 +111,7 @@ contract UBISwapper is PausableImpl {
 
     // functions - external
 
-    /// @dev swapp incoming ETH/ERC20 donations to $tokenToSwap
+    /// @dev swap incoming ETH/ERC20 donations to $tokenToSwap
     /// @param swapCallbackData swap data
     function donate(SwapCallbackData calldata swapCallbackData) external payable pausable {
 
@@ -133,7 +128,9 @@ contract UBISwapper is PausableImpl {
         }
 
         token.safeApprove(address(swapRouter), eip.amountIn);
-        swapRouter.exactInput(eip);
+        uint256 amountDeposited = swapRouter.exactInput(eip);
+
+        emit Deposited(msg.sender, amountDeposited);
     }
 
     /// functions - helpers
