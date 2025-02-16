@@ -1,6 +1,18 @@
 [profile.default]
 src = "src"
 out = "out"
+ffi = false
+via_ir = false
+
 libs = ["lib"]
 
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+[[profile.default.fs_permissions]]
+access = 'read'
+path = 'script/input'
+
+[etherscan]
+base-sepolia = { key = "api-key" }
+base = { key = "api-key" }
+
+[profile.test]
+env = ".env.testing"

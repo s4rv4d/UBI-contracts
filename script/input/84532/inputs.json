@@ -1,0 +1,7 @@
+{
+  "swapRouter": "addr",
+  "weth9": "addr",
+  "buildToken": "addr",
+  "owner": "addr",
+  "scoreContract": "addr"
+}
