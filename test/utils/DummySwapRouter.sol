@@ -24,7 +24,6 @@ contract DummySwapRouter is ISwapRouter {
         lastParams = ISwapRouter.ExactInputParams({
             path: params.path,
             recipient: params.recipient,
-            deadline: params.deadline,
             amountIn: params.amountIn,
             amountOutMinimum: params.amountOutMinimum
         });

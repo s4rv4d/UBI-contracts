@@ -92,7 +92,6 @@ contract UBISwapperTest is Test {
                 address(mockFromERC20), uint24(3000), address(mockWETH9), uint24(3000), address(mockERC20)
             ),
             recipient: recipient,
-            deadline: deadline,
             amountIn: amountIn,
             amountOutMinimum: amountOutMinimum
         });
@@ -103,13 +102,12 @@ contract UBISwapperTest is Test {
             isERC20: true,
             amountIn: amountIn
         });
-        bytes memory data = abi.encode(swapCallbackData);
 
         // Approve UBISwapper to pull the tokens.
         mockFromERC20.approve(address(ubiswapper), amountIn);
 
         // Call deposit with zero ETH.
-        ubiswapper.donate(data);
+        ubiswapper.donate(swapCallbackData);
 
         // Verify that tokens were transferred from the caller to the UBISwapper contract.
         uint256 contractBalance = mockFromERC20.balanceOf(address(ubiswapper));
@@ -148,7 +146,6 @@ contract UBISwapperTest is Test {
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
             path: abi.encodePacked(address(mockWETH9), uint24(3000), address(mockERC20)),
             recipient: recipient,
-            deadline: deadline,
             amountIn: amountIn,
             amountOutMinimum: amountOutMinimum
         });
@@ -159,9 +156,8 @@ contract UBISwapperTest is Test {
             isERC20: false,
             amountIn: amountIn
         });
-        bytes memory data = abi.encode(swapCallbackData);
 
-        ubiswapper.donate{value: amountIn}(data);
+        ubiswapper.donate{value: amountIn}(swapCallbackData);
 
         // Verify that tokens were transferred from the caller to the UBISwapper contract.
         uint256 contractBalance = mockWETH9.balanceOf(address(ubiswapper));
@@ -203,7 +199,6 @@ contract UBISwapperTest is Test {
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
             path: abi.encodePacked(address(mockWETH9), uint24(3000), address(mockERC20)),
             recipient: recipient,
-            deadline: deadline,
             amountIn: amountIn,
             amountOutMinimum: amountOutMinimum
         });
@@ -214,9 +209,8 @@ contract UBISwapperTest is Test {
             isERC20: false,
             amountIn: amountIn
         });
-        bytes memory data = abi.encode(swapCallbackData);
 
         vm.expectRevert();
-        ubiswapper.donate{value: amountIn}(data);
+        ubiswapper.donate{value: amountIn}(swapCallbackData);
     }
 }

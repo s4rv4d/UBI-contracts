@@ -117,9 +117,8 @@ contract UBISwapper is PausableImpl {
     // functions - external
 
     /// @dev swapp incoming ETH/ERC20 donations to $tokenToSwap
-    /// @param data_ swap params
-    function donate(bytes calldata data_) external payable pausable {
-        SwapCallbackData memory swapCallbackData = abi.decode(data_, (SwapCallbackData));
+    /// @param swapCallbackData swap data
+    function donate(SwapCallbackData calldata swapCallbackData) external payable pausable {
 
         ISwapRouter.ExactInputParams memory eip = swapCallbackData.exactInputParams;
         address token = _getStartTokenFromPath(eip.path);

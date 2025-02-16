@@ -33,6 +33,9 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev withdrawal failed
     error FailedToWithdraw();
 
+    /// @dev not enough balance
+    error LessBUILDBalance();
+
     /* -------------------------------------------------------------------------- */
     /*                                   EVENTS                                   */
     /* -------------------------------------------------------------------------- */
@@ -58,6 +61,12 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
     /// @dev mapping for how much user has withdrawn
     mapping(address => uint256) public userWithdrawn;
+
+    /// @dev mapping to see if user has claimed his share
+    mapping(address => uint256) public userDoneClaimCount;
+
+    /// @dev mapping to see next date to claim
+    mapping(address => uint256) public dateToClaimNext;
 
     /* -------------------------------------------------------------------------- */
     /*                           CONSTRUCTOR/ INIT                                */
@@ -94,8 +103,8 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     function getAllocation(address _recipient, uint256 _totalScore) public view returns (uint256) {
         /// @dev userAllocation = (userScore / totalScore) * totalRewardPool
         /// @audit the final 1000 is just to test needs to be replaced by totalScore via passport register/API
-        //uint256 userAllocation = (scoreContract.getScoreByAddress(_recipient) * $BUILD.balanceOf(address(this))) / _totalScore;
-        uint256 userAllocation = (100 * $BUILD.balanceOf(address(this))) / _totalScore;
+        uint256 userAllocation = (scoreContract.getScoreByAddress(_recipient) * $BUILD.balanceOf(address(this))) / _totalScore;
+        // uint256 userAllocation = (100 * $BUILD.balanceOf(address(this))) / _totalScore;
         return userAllocation;
     }
 
