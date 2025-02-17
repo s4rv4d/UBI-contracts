@@ -10,13 +10,16 @@ import {MockWETH9} from "./utils/MockWETH9.sol";
 import {UBISwapper} from "../src/UBISwapper.sol";
 import {UBISplitV1} from "../src/UBISplitV1.sol";
 import {UBISplitProxy} from "../src/UBISplitProxy.sol";
+import {UBIRegistry} from "../src/UBIRegistry.sol";
 import {IPassportBuilderScore} from "../src/interfaces/IPassportBuilderScore.sol";
+import {IUBIRegistry} from "../src/interfaces/IUBIRegistry.sol";
 
 contract UBISplitV1Test is Test {
 
     UBISplitProxy public splitProxy;
     UBISplitV1 public splitImplementation;
     IPassportBuilderScore public scoreContract;
+    UBIRegistry public registry;
 
     string BASE_RPC_URL = vm.envString("BASE_RPC_URL");
     address SARVAD_ADDR = vm.envAddress("SARVAD_ADDR");
@@ -36,13 +39,18 @@ contract UBISplitV1Test is Test {
 
         scoreContract = IPassportBuilderScore(vm.envAddress("SCORE_CONTRACT"));
 
+        vm.startPrank(SARVAD_ADDR);
+        registry = new UBIRegistry(address(scoreContract), 60);
+        vm.stopPrank();
+
         splitImplementation = new UBISplitV1();
-        bytes memory data = abi.encodeWithSignature("initialize(address,address,uint256,uint256,uint256,uint256)", address(TEST_BUILD_TOKEN), address(scoreContract),60, 100, 10, 7);
+        bytes memory data = abi.encodeWithSignature("initialize(address,address,uint256,uint256,uint256)", address(TEST_BUILD_TOKEN), address(registry), 100, 10, 7);
 
         splitProxy = new UBISplitProxy(address(splitImplementation), data);
 
         vm.startPrank(SARVAD_ADDR);
         TEST_BUILD_TOKEN.transfer(address(splitProxy), 100 ether);
+        registry.addEligibleUser(address(SARVAD_ADDR), true);
         vm.stopPrank();
     }
 

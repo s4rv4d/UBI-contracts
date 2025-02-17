@@ -5,7 +5,9 @@ import {Script, console2, console,  stdJson} from "forge-std/Script.sol";
 import {UBISplitV1} from "../src/UBISplitV1.sol";
 import {UBISwapper} from "../src/UBISwapper.sol";
 import {UBISplitProxy} from "../src/UBISplitProxy.sol";
+import {UBIRegistry} from "../src/UBIRegistry.sol";
 import {IPassportBuilderScore} from "../src/interfaces/IPassportBuilderScore.sol";
+import {IUBIRegistry} from "../src/interfaces/IUBIRegistry.sol";
 import {DummySwapRouter} from "../test/utils/DummySwapRouter.sol";
 
 contract DeployUBI is Script {
@@ -22,6 +24,7 @@ contract DeployUBI is Script {
     UBISplitProxy public splitProxy;
     UBISplitV1 public splitImplementation;
     IPassportBuilderScore public sContract;
+    UBIRegistry public registry;
 
     function setUp() public {
         string memory json = readInput("inputs");
@@ -47,9 +50,12 @@ contract DeployUBI is Script {
 
         // deploy split and proxy
         sContract = IPassportBuilderScore(scoreContract);
+
+        registry = new UBIRegistry(address(scoreContract), 60);
+
         splitImplementation = new UBISplitV1();
 
-        bytes memory data = abi.encodeWithSignature("initialize(address,address,uint256,uint256,uint256,uint256)", address(buildToken), address(scoreContract),60, 100, 10, 7);
+        bytes memory data = abi.encodeWithSignature("initialize(address,address,uint256,uint256,uint256)", address(buildToken), address(registry), 100, 10, 7);
         splitProxy = new UBISplitProxy(address(splitImplementation), data);
 
         // deploy swapper
@@ -66,6 +72,7 @@ contract DeployUBI is Script {
         console2.log("splitImplementation: ", address(splitImplementation));
         console2.log("splitProxy: ", address(splitProxy));
         console2.log("ubiswapper: ", address(ubiswapper));
+        console2.log("ubiregistry: ", address(registry));
 
         vm.stopBroadcast();
     }

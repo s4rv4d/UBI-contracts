@@ -1,6 +1,7 @@
 // SPDX-License-Identifier:MIT
 pragma solidity ^0.8.22;
 
+/// libs
 import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "openzeppelin-contracts/proxy/utils/Initializable.sol";
 import {PausableImpl} from "splits-utils/src/PausableImpl.sol";
@@ -8,7 +9,8 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {TokenUtils} from "splits-utils/src/TokenUtils.sol";
 
-import {IPassportBuilderScore} from "./interfaces/IPassportBuilderScore.sol";
+/// interfaces
+import {IUBIRegistry} from "./interfaces/IUBIRegistry.sol";
 
 /// @title UBISplitV1
 /// @author s4rv4d
@@ -49,9 +51,6 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev updated claim amount
     event UpdatedClaimAmount(uint256 _newClaimAmount);
 
-    /// @dev updated score threshold
-    event UpdatedScorethreshold(uint256 _newScorethreshold);
-
     /// @dev updated claim amount
     event UpdatedClaimCount(uint256 _newClaimCount);
 
@@ -65,11 +64,8 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev BUILD contract
     ERC20 public $BUILD;
 
-    /// @dev the contract to query builder score
-    IPassportBuilderScore public scoreContract;
-
-    /// @dev score threshold
-    uint256 public scoreThreshold;
+    /// @dev the contract to query eligibilty details
+    IUBIRegistry public registry;
 
     /// @dev amount a user can claim
     uint256 public claimAmount;
@@ -90,7 +86,7 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     mapping(address => uint256) public dateToClaimNext;
 
     /* -------------------------------------------------------------------------- */
-    /*                           CONSTRUCTOR/ INIT                                */
+    /*                           CONSTRUCTOR / INIT                               */
     /* -------------------------------------------------------------------------- */
     constructor() {
         _disableInitializers();
@@ -98,12 +94,11 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
 
     /// @dev initializes UBISplit via proxy
     /// @param _buildToken address of BUILD token deposited
-    /// @param _passportAddress address of passport registry to get address scores
-    /// @param _scoreThreshold the score threshold to let eligible users claim
+    /// @param _registryAddress address of UBI registry to get address scores
     /// @param _claimAmount the static claimable amount
     /// @param _claimCount the number of time a users can claim (ex: 10)
     /// @param _claimInterval time between each claim (ex: 10)
-    function initialize(address _buildToken, address _passportAddress, uint256 _scoreThreshold, uint256 _claimAmount, uint256 _claimCount, uint256 _claimInterval)
+    function initialize(address _buildToken, address _registryAddress, uint256 _claimAmount, uint256 _claimCount, uint256 _claimInterval)
         public
         initializer
     {
@@ -112,8 +107,7 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
         __UUPSUpgradeable_init();
 
         $BUILD = ERC20(_buildToken);
-        scoreContract = IPassportBuilderScore(_passportAddress);
-        scoreThreshold = _scoreThreshold;
+        registry = IUBIRegistry(_registryAddress);
         claimAmount = _claimAmount;
         claimCount = _claimCount;
         claimInterval = _claimInterval;
@@ -142,11 +136,6 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
         return claimAmount;
     }
 
-    /// @dev get score threshold
-    function getScoreThreshold() public view returns (uint256) {
-        return scoreThreshold;
-    }
-
     /// @dev get claim count
     function getClaimCount() public view returns (uint256) {
         return claimCount;
@@ -160,8 +149,7 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     /// @dev check if user is eligible for claim
     /// @param _recipient user 
     function isValidUser(address _recipient) public view returns (bool) {
-        uint256 userScore = scoreContract.getScoreByAddress(_recipient);
-        return userScore >= scoreThreshold;
+        return registry.isUserEligible(_recipient);
     }
 
     /// @dev get user allocation
@@ -179,11 +167,18 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
         return claimAmount;
     }
 
+    /// functions - internal
+    /// @dev updates claimed status of a user
+    /// @param _user user whose status is being updated
+    function _updateClaimed(address _user) internal {
+        registry.updateUserClaimed(_user, true);
+    }
+
     /// functions - external
     /// @dev function to withdraw/claim user allocation
     function withdrawAllocation() external {
         address recipient = msg.sender;
-        uint256 userAllocation = claimAmount;
+        uint256 userAllocation = claimAmount *  (10 ** uint256($BUILD.decimals()));
 
         /// checks
         if (!isValidUser(recipient)) {
@@ -208,7 +203,11 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
         userWithdrawn[recipient] += userAllocation;
 
         /// interaction
-        bool status = $BUILD.transfer(recipient, userAllocation * $BUILD.decimals);
+        if (userDoneClaimCount[recipient] >= claimCount) {
+            _updateClaimed(recipient);
+        }
+
+        bool status = $BUILD.transfer(recipient, userAllocation);
         if (!status) {
             revert FailedToWithdraw();
         }
@@ -226,13 +225,6 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     function setClaimAmount(uint256 _newClaimAmount) external onlyOwner {
         claimAmount = _newClaimAmount;
         emit UpdatedClaimAmount(_newClaimAmount);
-    }
-
-    /// @dev update score threshold
-    /// @param _newScorethreshold updated score threshold
-    function setScorethreshold(uint256 _newScorethreshold) external onlyOwner {
-        scoreThreshold = _newScorethreshold;
-        emit UpdatedScorethreshold(_newScorethreshold);
     }
 
     /// @dev update claim count
