@@ -69,7 +69,7 @@ contract UBISplitV1Test is Test {
     }
 
     function testSplitWithdrawFailure() public {
-        vm.expectRevert(abi.encodeWithSelector(NotValidScore.selector, address(1)));
+        vm.expectRevert("Not a valid score");
         vm.startPrank(address(1));
         UBISplitV1(address(splitProxy)).withdrawAllocation();
         console.log("ERC20 bal is ", TEST_BUILD_TOKEN.balanceOf(address(1)));

@@ -23,25 +23,6 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
     using TokenUtils for address;
 
     /* -------------------------------------------------------------------------- */
-    /*                                   ERRORS                                   */
-    /* -------------------------------------------------------------------------- */
-
-    /// @dev withdrawal failed
-    error FailedToWithdraw();
-
-    /// @dev not enough balance
-    error LessBUILDBalance();
-
-    /// @dev doesnt meet score requirements
-    error NotValidScore(address _recipient);
-
-    /// @dev already claimed
-    error ClaimedFullAllocation();
-
-    /// @dev claimed early
-    error ClaimedEarly();
-
-    /* -------------------------------------------------------------------------- */
     /*                                   EVENTS                                   */
     /* -------------------------------------------------------------------------- */
 
@@ -181,21 +162,10 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
         uint256 userAllocation = claimAmount *  (10 ** uint256($BUILD.decimals()));
 
         /// checks
-        if (!isValidUser(recipient)) {
-            revert NotValidScore(recipient);
-        }
-
-        if (userDoneClaimCount[recipient] >= claimCount) {
-            revert ClaimedFullAllocation();
-        }
-
-        if (block.timestamp < dateToClaimNext[recipient]) {
-            revert ClaimedEarly();
-        }
-
-        if (userAllocation > $BUILD.balanceOf(address(this))) {
-            revert LessBUILDBalance();
-        }
+        require(isValidUser(recipient), "Not a valid score");
+        require(userDoneClaimCount[recipient] < claimCount, "Claimed full allocation");
+        require(block.timestamp >= dateToClaimNext[recipient], "Claimed to early");
+        require(userAllocation <= $BUILD.balanceOf(address(this)), "Less BUILD balance");
 
         /// effects
         dateToClaimNext[recipient] = block.timestamp + (claimInterval * 1 days);
@@ -208,9 +178,7 @@ contract UBISplitV1 is UUPSUpgradeable, PausableImpl {
         }
 
         bool status = $BUILD.transfer(recipient, userAllocation);
-        if (!status) {
-            revert FailedToWithdraw();
-        }
+        require(status, "Failed to withdraw");
 
         emit AllocationWithdraw(recipient, userAllocation);
     }
