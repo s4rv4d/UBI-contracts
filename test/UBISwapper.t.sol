@@ -106,7 +106,7 @@ contract UBISwapperTest is Test {
         mockFromERC20.approve(address(ubiswapper), amountIn);
 
         // Call deposit with zero ETH.
-        ubiswapper.donate(swapCallbackData);
+        ubiswapper.donateAndSwap(swapCallbackData);
 
         // Verify that tokens were transferred from the caller to the UBISwapper contract.
         uint256 contractBalance = mockFromERC20.balanceOf(address(ubiswapper));
@@ -154,7 +154,7 @@ contract UBISwapperTest is Test {
             amountIn: amountIn
         });
 
-        ubiswapper.donate{value: amountIn}(swapCallbackData);
+        ubiswapper.donateAndSwap{value: amountIn}(swapCallbackData);
 
         // Verify that tokens were transferred from the caller to the UBISwapper contract.
         uint256 contractBalance = mockWETH9.balanceOf(address(ubiswapper));
@@ -206,6 +206,6 @@ contract UBISwapperTest is Test {
         });
 
         vm.expectRevert();
-        ubiswapper.donate{value: amountIn}(swapCallbackData);
+        ubiswapper.donateAndSwap{value: amountIn}(swapCallbackData);
     }
 }

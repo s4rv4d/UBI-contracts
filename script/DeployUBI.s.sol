@@ -68,6 +68,8 @@ contract DeployUBI is Script {
 
         ubiswapper = new UBISwapper(DummySwapRouter(swapRouter), payable(weth9), params);
 
+        registry.addEligibleUser(vm.envAddress("SARVAD_ADDR"), true);
+
         console2.log("sContract: ", address(sContract));
         console2.log("splitImplementation: ", address(splitImplementation));
         console2.log("splitProxy: ", address(splitProxy));

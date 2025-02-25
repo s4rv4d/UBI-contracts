@@ -113,7 +113,7 @@ contract UBISwapper is PausableImpl {
 
     /// @dev swap incoming ETH/ERC20 donations to $tokenToSwap
     /// @param swapCallbackData swap data
-    function donate(SwapCallbackData calldata swapCallbackData) external payable pausable {
+    function donateAndSwap(SwapCallbackData calldata swapCallbackData) external payable pausable {
 
         ISwapRouter.ExactInputParams memory eip = swapCallbackData.exactInputParams;
         address token = _getStartTokenFromPath(eip.path);
@@ -131,6 +131,13 @@ contract UBISwapper is PausableImpl {
         uint256 amountDeposited = swapRouter.exactInput(eip);
 
         emit Deposited(msg.sender, amountDeposited);
+    }
+
+    /// @dev send incoming $BUILD token to split contracts
+    /// @param amountToSend to send
+    function deposit(uint256 amountToSend) external pausable {
+        $tokenToSwap.transferFrom(msg.sender, address($beneficiary), amountToSend);
+        emit Deposited(msg.sender, amountToSend);
     }
 
     /// functions - helpers
